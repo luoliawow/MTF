@@ -71,6 +71,17 @@ vd CSpline(const vd& x, const vd& y, const vd& x_est)
     return result;
 }
 
+void ESF_Interp(const std::vector<std::tuple<double, double>>& dvps, const int ninterp, vd& dists, vd& grays)
+{
+    dists = rv::iota(0, ninterp)
+        | rv::transform([&](int i) {return std::lerp(std::get<0>(dvps.front()), std::get<0>(dvps.back()), 1.0 / ninterp * i); })
+        | ra::to<std::vector>();
+    vd dist_t = dvps | rv::elements<0> | ra::to<std::vector>();
+    vd gray_t = dvps | rv::elements<1> | ra::to<std::vector>();
+    grays = BSpline(dist_t, gray_t, dists);
+}
+
+
 // return [slope, offset] from the edge line
 std::tuple<float, float> EdgeFit(const cv::Mat& roi, std::vector<cv::Point>& points)
 {
@@ -110,6 +121,10 @@ void MTF::MTF(const vd& dists, const vd& grays, vd& mtf)
     mtf = fft
         | rv::transform([&](auto& c) { return std::abs(c) / sum; })
         | ra::to<std::vector>();
+
+    // TODO: Add frequency axis
+    
+    // TODO: Interpolate the MTF
 }
 
 vd MTF::Linspace(const double begin, const double end, const size_t n)
@@ -149,8 +164,8 @@ void MTF::Slanted(const cv::Mat& img, vd& dists, vd& grays, float thresh)
     cv::Mat hammed;
     ApplyHamming(img, points, hammed);
 
-    const float upper = thresh, lower = -thresh;
     std::vector<std::tuple<double, double>> dvps;
+    const float upper = thresh, lower = -thresh;
     for (int i = 0; i < hammed.total(); ++i)
     {
         int x = i % hammed.cols, y = i / hammed.cols;
@@ -162,10 +177,31 @@ void MTF::Slanted(const cv::Mat& img, vd& dists, vd& grays, float thresh)
 
     // interpolate the dist-gray pairs to 1000 points
     const int ninterp = 1000;
-    dists = rv::iota(0, ninterp)
-        | rv::transform([&](int i) {return std::lerp(std::get<0>(dvps.front()), std::get<0>(dvps.back()), 1.0 / ninterp * i); })
-        | ra::to<std::vector>();
-    vd dist_t = rv::elements<0>(dvps)| ra::to<std::vector>();
-    vd gray_t = rv::elements<1>(dvps)| ra::to<std::vector>();
-    grays = BSpline(dist_t, gray_t, dists);
+    ESF_Interp(dvps, ninterp, dists, grays);
 }
+
+// assume img only contains one circle
+void MTF::Cylinder(const cv::Mat& img, vd& dists, vd& grays, float thresh)
+{
+    cv::Mat blur;
+    cv::GaussianBlur(img, blur, cv::Size(9, 9), 2, 4);
+    
+    std::vector<cv::Vec3f> circles;
+    cv::HoughCircles(blur, circles, cv::HOUGH_GRADIENT, 1, img.rows / 8.0, 70, 30, 100, 1000);
+    float cx = circles[0][0], cy = circles[0][1], r = circles[0][2];
+
+    std::vector<std::tuple<double, double>> dvps;
+    const float upper = r + thresh, lower = r - thresh;
+    for (int i = 0; i < blur.total(); i++)
+    {
+        int x = i % blur.cols, y = i / blur.cols;
+        float dist = std::hypot(x - cx, y - cy);
+        if (dist >= lower && dist <= upper)
+            dvps.emplace_back(dist, blur.at<uchar>(y, x));
+    }
+    ra::sort(dvps, std::less<>{}, [](auto& dvp) {return std::get<0>(dvp); });
+
+    const int ninterp = 1000;
+    ESF_Interp(dvps, ninterp, dists, grays);
+}
+
