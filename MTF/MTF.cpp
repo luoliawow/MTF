@@ -4,6 +4,9 @@
 #include <gsl/gsl_bspline.h>
 #include <gsl/gsl_multifit.h>
 
+namespace rv = std::ranges::views;
+namespace ra = std::ranges;
+
 vd BSpline(const vd& x, const vd& y, const vd& x_est)
 {
     assert(x.size() == y.size());
@@ -118,13 +121,19 @@ void MTF::MTF(const vd& dists, const vd& grays, vd& mtf)
     const double sum = ra::fold_left(lsf, 0.0, std::plus<>());
     std::vector<std::complex<double>> fft(lsf.size());
     cv::dft(lsf,fft,cv::DFT_COMPLEX_OUTPUT);
-    mtf = fft
+    auto mtf_t = fft
         | rv::transform([&](auto& c) { return std::abs(c) / sum; })
         | ra::to<std::vector>();
 
     // TODO: Add frequency axis
-    
+    const vd freq = MTF::Linspace(0.0, 1.0, 1000);
     // TODO: Interpolate the MTF
+    int n = mtf_t.size();
+    double px = n / (dists.back() - dists.front());
+    auto x = rv::iota(0, n)
+        | rv::transform([&](int i) { return px * i / n ; })
+        | ra::to<std::vector>();
+    mtf = CSpline(x, mtf_t, freq);
 }
 
 vd MTF::Linspace(const double begin, const double end, const size_t n)
