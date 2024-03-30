@@ -1,7 +1,4 @@
 file(GLOB_RECURSE srcs CONFIGURE_DEPENDS src/*.cpp include/*.h)
 add_executable(sfrmain ${srcs})
 target_include_directories(sfrmain PUBLIC include)
-find_package(OpenCV REQUIRED)
-target_include_directories(sfr PRIVATE ${OpenCV_INCLUDE_DIRS})
-target_link_libraries(sfr PUBLIC ${OpenCV_LIBS})
 target_link_libraries(sfrmain PUBLIC sfr)
