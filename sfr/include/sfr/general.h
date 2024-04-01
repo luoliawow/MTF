@@ -11,6 +11,7 @@ namespace sfr {
     std::vector<double> center_shift(const std::vector<double>& x, const int center);
     std::vector<double> lsf(const std::vector<double>& esf);
     std::vector<double> mtf(const std::vector<double>& lsf);
+    double mtf10(const std::vector<double>& mtf);
 }
 
 

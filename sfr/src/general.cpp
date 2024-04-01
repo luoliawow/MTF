@@ -40,3 +40,10 @@ std::vector<double> sfr::mtf(const std::vector<double>& lsf) {
     for (size_t i = 0; i < n; i++) mtf[i] = std::abs(fft[i]) / DC;
     return mtf;
 }
+
+double sfr::mtf10(const std::vector<double> &mtf) {
+    auto point = std::adjacent_find(mtf.begin(), mtf.end(), [](auto&& l, auto&& r) { return l > 0.1 && r < 0.1; });
+    const int n = mtf.size(), i = std::distance(mtf.begin(), point);
+    double k = n * (*(point+1) - *point);
+    return (0.1 - *point) / k + 1.0 * i / n;
+}
