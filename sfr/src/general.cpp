@@ -1,4 +1,5 @@
 #include <sfr/general.h>
+#include <Eigen/Dense>
 
 std::vector<double> sfr::tukey(const int n0, const double mid) {
     const double m1 = n0 / 2.0, m2 = mid, m3 = n0 - mid;
@@ -21,29 +22,23 @@ std::vector<double> sfr::center_shift(const std::vector<double>& x, const int ce
     return out;
 }
 
-std::vector<double> sfr::lsf(const std::vector<double>& esf) {
-    std::vector<double> diff(esf.size());
-    cv::filter2D(esf, diff, CV_64F, sfr::kernel);
-    double max; cv::Point maxLoc;
-    cv::minMaxLoc(diff, nullptr, &max, nullptr, &maxLoc);
-    diff = sfr::center_shift(diff, maxLoc.x);
-    cv::multiply(diff, sfr::hamming(esf.size()), diff, 1/max);
-    return diff;
+std::vector<double> sfr::polyfit(const std::vector<double> &x, const std::vector<double> &y, int degree) {
+    assert(x.size() == y.size());
+    // polyfit
+    Eigen::VectorXd Y = Eigen::Map<const Eigen::VectorXd>(y.data(), y.size());
+    Eigen::MatrixXd A(x.size(), degree + 1);
+    for (int i = 0; i < x.size(); i++)
+        for (int j = 0; j <= degree; j++)
+            A(i, j) = pow(x[i], j);
+    Eigen::VectorXd coef = A.householderQr().solve(Y);
+    return std::vector<double>(coef.data(), coef.data() + coef.size());
 }
 
-std::vector<double> sfr::mtf(const std::vector<double>& lsf) {
-    std::vector<std::complex<double>> fft;
-    cv::dft(lsf, fft, cv::DFT_COMPLEX_OUTPUT);
-    const double DC = fft[0].real();
-    const int n = lsf.size() / sfr::factor;
-    std::vector<double> mtf(n);
-    for (size_t i = 0; i < n; i++) mtf[i] = std::abs(fft[i]) / DC;
-    return mtf;
-}
-
-double sfr::mtf10(const std::vector<double> &mtf) {
-    auto point = std::adjacent_find(mtf.begin(), mtf.end(), [](auto&& l, auto&& r) { return l > 0.1 && r < 0.1; });
-    const int n = mtf.size(), i = std::distance(mtf.begin(), point);
-    double k = n * (*(point+1) - *point);
-    return (0.1 - *point) / k + 1.0 * i / n;
+std::vector<double> sfr::polyval(const std::vector<double> &x, const std::vector<double> &coeff) {
+    std::vector<double> out(x.size(), 0);
+    for (int i = 0; i < x.size(); i++) {
+        for (int j = 0; j < coeff.size(); j++)
+            out[i] += coeff[j] * pow(x[i], j);
+    }
+    return out;
 }
